@@ -76,6 +76,28 @@ impl NormalMinor {
                 cmd
             }
 
+            // 'cc' special case
+            NormalMinor::OperatorPending(repeat, Operator::Change) if ch == 'c' => {
+                let cmd = Some(Command::Operation(Operation::TextObject(
+                    *repeat,
+                    Operator::Change,
+                    TextObject(ObjRange::Outer, ObjMotion::Line),
+                )));
+                *self = Default::default();
+                cmd
+            }
+
+            // 'yy' special case
+            NormalMinor::OperatorPending(repeat, Operator::Yank) if ch == 'y' => {
+                let cmd = Some(Command::Operation(Operation::TextObject(
+                    *repeat,
+                    Operator::Yank,
+                    TextObject(ObjRange::Outer, ObjMotion::Line),
+                )));
+                *self = Default::default();
+                cmd
+            }
+
             NormalMinor::OperatorPending(repeat, operator) => {
                 if let Some(motion) = Motion::from_char(ch) {
                     let cmd = Some(Command::Operation(Operation::Motion(
@@ -520,6 +542,36 @@ mod tests {
             Some(Command::Operation(Operation::TextObject(
                 2,
                 Operator::Delete,
+                TextObject(ObjRange::Outer, ObjMotion::Line),
+            ))),
+        )];
+        for (input, expected) in expectations.iter() {
+            assert_eq!(normal_parse(input), *expected);
+        }
+    }
+
+    #[test]
+    fn test_cc_special_case() {
+        let expectations = [(
+            "2cc",
+            Some(Command::Operation(Operation::TextObject(
+                2,
+                Operator::Change,
+                TextObject(ObjRange::Outer, ObjMotion::Line),
+            ))),
+        )];
+        for (input, expected) in expectations.iter() {
+            assert_eq!(normal_parse(input), *expected);
+        }
+    }
+
+    #[test]
+    fn test_yy_special_case() {
+        let expectations = [(
+            "2yy",
+            Some(Command::Operation(Operation::TextObject(
+                2,
+                Operator::Yank,
                 TextObject(ObjRange::Outer, ObjMotion::Line),
             ))),
         )];
