@@ -239,6 +239,8 @@ pub enum Motion {
     Word,
     WordEnd,
     Line,
+    ToChar,
+    FindChar,
 }
 
 impl Motion {
@@ -254,6 +256,8 @@ impl Motion {
             'E' => Some(Motion::WordEnd),
             'b' => Some(Motion::Subword),
             'B' => Some(Motion::Word),
+            't' | 'T' => Some(Motion::ToChar),
+            'f' | 'F' => Some(Motion::FindChar),
             _ => None,
         }
     }
@@ -278,6 +282,10 @@ impl Direction {
             'E' => Some(Direction::Forward),
             'b' => Some(Direction::Backward),
             'B' => Some(Direction::Backward),
+            't' => Some(Direction::Forward),
+            'T' => Some(Direction::Backward),
+            'f' => Some(Direction::Forward),
+            'F' => Some(Direction::Backward),
             _ => None,
         }
     }
