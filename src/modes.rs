@@ -32,7 +32,7 @@ impl Normal {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NormalMinor {
-    Initial(usize),
+    Initial(Option<usize>),
     OperatorPending(usize, Operator),
     TextObjectPending(usize, Operator, ObjRange),
 }
@@ -42,20 +42,16 @@ impl NormalMinor {
         match self {
             NormalMinor::Initial(repeat) => {
                 if let Some(digit) = digit_from_char(ch) {
-                    if *repeat == 0 {
-                        *self = NormalMinor::Initial(digit);
-                    } else {
-                        *self = NormalMinor::Initial(*repeat * 10 + digit);
-                    }
+                    *self = NormalMinor::Initial(Some(repeat.unwrap_or_default() * 10 + digit));
                     return None;
                 }
                 if let Some(operator) = Operator::from_char(ch) {
-                    *self = NormalMinor::OperatorPending(*repeat, operator);
+                    *self = NormalMinor::OperatorPending(repeat.unwrap_or(1), operator);
                     return None;
                 }
                 if let Some(motion) = Motion::from_char(ch) {
                     let cmd = Some(Command::Motion(
-                        *repeat,
+                        repeat.unwrap_or(1),
                         motion,
                         Direction::from_char(ch).expect("invalid direction"),
                     ));
@@ -107,20 +103,11 @@ impl NormalMinor {
             }
         }
     }
-
-    fn repeat(&self) -> usize {
-        match self {
-            NormalMinor::Initial(repeat) => *repeat,
-            NormalMinor::OperatorPending(repeat, _) => *repeat,
-            NormalMinor::TextObjectPending(repeat, _, _) => *repeat,
-        }
-        .max(1)
-    }
 }
 
 impl Default for NormalMinor {
     fn default() -> Self {
-        NormalMinor::Initial(0)
+        NormalMinor::Initial(None)
     }
 }
 
@@ -192,7 +179,10 @@ pub struct TextObject(ObjRange, ObjMotion);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Motion {
     Char,
+    Subword,
+    SubwordEnd,
     Word,
+    WordEnd,
     Line,
 }
 
@@ -203,7 +193,12 @@ impl Motion {
             'l' => Some(Motion::Char),
             'j' => Some(Motion::Line),
             'k' => Some(Motion::Line),
-            'w' => Some(Motion::Word),
+            'w' => Some(Motion::Subword),
+            'W' => Some(Motion::Word),
+            'e' => Some(Motion::SubwordEnd),
+            'E' => Some(Motion::WordEnd),
+            'b' => Some(Motion::Subword),
+            'B' => Some(Motion::Word),
             _ => None,
         }
     }
@@ -223,6 +218,11 @@ impl Direction {
             'k' => Some(Direction::Backward),
             'l' => Some(Direction::Forward),
             'w' => Some(Direction::Forward),
+            'W' => Some(Direction::Forward),
+            'e' => Some(Direction::Forward),
+            'E' => Some(Direction::Forward),
+            'b' => Some(Direction::Backward),
+            'B' => Some(Direction::Backward),
             _ => None,
         }
     }
@@ -259,19 +259,131 @@ mod tests {
     }
 
     #[test]
-    fn test_word_motion() {
+    fn test_subword_motion() {
         let expectations = [
             (
                 "w",
-                Some(Command::Motion(1, Motion::Word, Direction::Forward)),
+                Some(Command::Motion(1, Motion::Subword, Direction::Forward)),
             ),
             (
                 "2w",
-                Some(Command::Motion(2, Motion::Word, Direction::Forward)),
+                Some(Command::Motion(2, Motion::Subword, Direction::Forward)),
             ),
             (
                 "340w",
+                Some(Command::Motion(340, Motion::Subword, Direction::Forward)),
+            ),
+        ];
+        for (input, expected) in expectations.iter() {
+            assert_eq!(normal_parse(input), *expected);
+        }
+    }
+
+    #[test]
+    fn test_word_motion() {
+        let expectations = [
+            (
+                "W",
+                Some(Command::Motion(1, Motion::Word, Direction::Forward)),
+            ),
+            (
+                "2W",
+                Some(Command::Motion(2, Motion::Word, Direction::Forward)),
+            ),
+            (
+                "340W",
                 Some(Command::Motion(340, Motion::Word, Direction::Forward)),
+            ),
+        ];
+        for (input, expected) in expectations.iter() {
+            assert_eq!(normal_parse(input), *expected);
+        }
+    }
+
+    #[test]
+    fn test_hjkl_motion() {
+        let expectations = [
+            (
+                "h",
+                Some(Command::Motion(1, Motion::Char, Direction::Backward)),
+            ),
+            (
+                "j",
+                Some(Command::Motion(1, Motion::Line, Direction::Forward)),
+            ),
+            (
+                "k",
+                Some(Command::Motion(1, Motion::Line, Direction::Backward)),
+            ),
+            (
+                "l",
+                Some(Command::Motion(1, Motion::Char, Direction::Forward)),
+            ),
+        ];
+        for (input, expected) in expectations.iter() {
+            assert_eq!(normal_parse(input), *expected);
+        }
+    }
+
+    #[test]
+    fn test_word_end_motion() {
+        let expectations = [
+            (
+                "e",
+                Some(Command::Motion(1, Motion::SubwordEnd, Direction::Forward)),
+            ),
+            (
+                "E",
+                Some(Command::Motion(1, Motion::WordEnd, Direction::Forward)),
+            ),
+            (
+                "2e",
+                Some(Command::Motion(2, Motion::SubwordEnd, Direction::Forward)),
+            ),
+            (
+                "2E",
+                Some(Command::Motion(2, Motion::WordEnd, Direction::Forward)),
+            ),
+            (
+                "340e",
+                Some(Command::Motion(340, Motion::SubwordEnd, Direction::Forward)),
+            ),
+            (
+                "340E",
+                Some(Command::Motion(340, Motion::WordEnd, Direction::Forward)),
+            ),
+        ];
+        for (input, expected) in expectations.iter() {
+            assert_eq!(normal_parse(input), *expected);
+        }
+    }
+
+    #[test]
+    fn test_word_back_motion() {
+        let expectations = [
+            (
+                "b",
+                Some(Command::Motion(1, Motion::Subword, Direction::Backward)),
+            ),
+            (
+                "B",
+                Some(Command::Motion(1, Motion::Word, Direction::Backward)),
+            ),
+            (
+                "2b",
+                Some(Command::Motion(2, Motion::Subword, Direction::Backward)),
+            ),
+            (
+                "2B",
+                Some(Command::Motion(2, Motion::Word, Direction::Backward)),
+            ),
+            (
+                "340b",
+                Some(Command::Motion(340, Motion::Subword, Direction::Backward)),
+            ),
+            (
+                "340B",
+                Some(Command::Motion(340, Motion::Word, Direction::Backward)),
             ),
         ];
         for (input, expected) in expectations.iter() {
