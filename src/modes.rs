@@ -64,6 +64,18 @@ impl NormalMinor {
                 *self = Default::default();
                 None
             }
+
+            // 'dd' special case
+            NormalMinor::OperatorPending(repeat, Operator::Delete) if ch == 'd' => {
+                let cmd = Some(Command::Operation(Operation::TextObject(
+                    *repeat,
+                    Operator::Delete,
+                    TextObject(ObjRange::Outer, ObjMotion::Line),
+                )));
+                *self = Default::default();
+                cmd
+            }
+
             NormalMinor::OperatorPending(repeat, operator) => {
                 if let Some(motion) = Motion::from_char(ch) {
                     let cmd = Some(Command::Operation(Operation::Motion(
@@ -162,12 +174,33 @@ impl ObjRange {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjMotion {
     Word,
+    Subword,
+    Paragraph,
+    SingeQuote,
+    DoubleQuote,
+    Paren,
+    Bracket,
+    Brace,
+    Angle,
+    Tag,
+    BackTick,
+    Line,
 }
 
 impl ObjMotion {
     fn from_char(ch: char) -> Option<ObjMotion> {
         match ch {
-            'w' => Some(ObjMotion::Word),
+            'W' => Some(ObjMotion::Word),
+            'w' => Some(ObjMotion::Subword),
+            'p' => Some(ObjMotion::Paragraph),
+            '\'' => Some(ObjMotion::SingeQuote),
+            '"' => Some(ObjMotion::DoubleQuote),
+            '(' | ')' => Some(ObjMotion::Paren),
+            '[' | ']' => Some(ObjMotion::Bracket),
+            '{' | '}' => Some(ObjMotion::Brace),
+            '<' | '>' => Some(ObjMotion::Angle),
+            't' => Some(ObjMotion::Tag),
+            '`' => Some(ObjMotion::BackTick),
             _ => None,
         }
     }
@@ -386,6 +419,110 @@ mod tests {
                 Some(Command::Motion(340, Motion::Word, Direction::Backward)),
             ),
         ];
+        for (input, expected) in expectations.iter() {
+            assert_eq!(normal_parse(input), *expected);
+        }
+    }
+
+    #[test]
+    fn test_line_motions() {
+        let expectations = [
+            (
+                "j",
+                Some(Command::Motion(1, Motion::Line, Direction::Forward)),
+            ),
+            (
+                "k",
+                Some(Command::Motion(1, Motion::Line, Direction::Backward)),
+            ),
+            (
+                "2j",
+                Some(Command::Motion(2, Motion::Line, Direction::Forward)),
+            ),
+        ];
+        for (input, expected) in expectations.iter() {
+            assert_eq!(normal_parse(input), *expected);
+        }
+    }
+
+    #[test]
+    fn test_change_operator() {
+        let expectations = [
+            (
+                "cw",
+                Some(Command::Operation(Operation::Motion(
+                    1,
+                    Operator::Change,
+                    Motion::Subword,
+                    Direction::Forward,
+                ))),
+            ),
+            (
+                "2cw",
+                Some(Command::Operation(Operation::Motion(
+                    2,
+                    Operator::Change,
+                    Motion::Subword,
+                    Direction::Forward,
+                ))),
+            ),
+        ];
+        for (input, expected) in expectations.iter() {
+            assert_eq!(normal_parse(input), *expected);
+        }
+    }
+
+    #[test]
+    fn test_delete_text_object() {
+        let expectations = [
+            (
+                "diw",
+                Some(Command::Operation(Operation::TextObject(
+                    1,
+                    Operator::Delete,
+                    TextObject(ObjRange::Inner, ObjMotion::Subword),
+                ))),
+            ),
+            (
+                "2diw",
+                Some(Command::Operation(Operation::TextObject(
+                    2,
+                    Operator::Delete,
+                    TextObject(ObjRange::Inner, ObjMotion::Subword),
+                ))),
+            ),
+            (
+                "daW",
+                Some(Command::Operation(Operation::TextObject(
+                    1,
+                    Operator::Delete,
+                    TextObject(ObjRange::Outer, ObjMotion::Word),
+                ))),
+            ),
+            (
+                "2dap",
+                Some(Command::Operation(Operation::TextObject(
+                    2,
+                    Operator::Delete,
+                    TextObject(ObjRange::Outer, ObjMotion::Paragraph),
+                ))),
+            ),
+        ];
+        for (input, expected) in expectations.iter() {
+            assert_eq!(normal_parse(input), *expected);
+        }
+    }
+
+    #[test]
+    fn test_dd_special_case() {
+        let expectations = [(
+            "2dd",
+            Some(Command::Operation(Operation::TextObject(
+                2,
+                Operator::Delete,
+                TextObject(ObjRange::Outer, ObjMotion::Line),
+            ))),
+        )];
         for (input, expected) in expectations.iter() {
             assert_eq!(normal_parse(input), *expected);
         }
